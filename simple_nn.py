@@ -4,13 +4,14 @@ from copy import deepcopy
 import numpy as np
 
 class SimpleNN(object):
-
+    """
+    Simple Backpropagation Neural Network
+    """
     def __init__(self, _shape):
-
         self._shape = tuple(_shape)
-        self._weights = [np.random.random((dim_out, dim_in))
+        self._weights = [2*np.random.random((dim_out, dim_in)) - 1
                          for dim_in, dim_out in zip(self._shape[:-1], self._shape[1:])]
-        self._biases = [np.random.random(dim) for dim in self._shape[1:]]
+        self._biases = [2*np.random.random(dim)-1 for dim in self._shape[1:]]
 
     @property
     def shape(self):
@@ -43,24 +44,30 @@ class SimpleNN(object):
           (default: 1000)
         - nu <float>: learning rate (default: 0.1)
         """
+        N = X.shape[0]
         for _ in range(num_iter):
             # forward propagation
             activations = self._forward_prob(X)
             # back propagation
             ## find deltas
-            ## deltas[i] = delta at layer L-i, where L is the
-            ## total number of layers
             deltas = [(Y.T-activations[-1])*grad_sigmoid(activations[-1])]
             for i, (weight, act) in enumerate(zip(self._weights[::-1], activations[:-1][::-1])):
                 delta_next = deltas[i]
-                delta = weight.T.dot(delta_next) * grad_sigmoid(act)
+                if i < len(self.shape)-1:
+                    # non-input layer
+                    delta = weight.T.dot(delta_next) * grad_sigmoid(act)
+                else:
+                    # input layer
+                    delta = weight.T.dot(delta_next) * act
                 deltas.append(delta)
+            deltas = deltas[::-1]
 
             for i in range(len(self._weights)):
-                weight = self._weights[i]
-                act = activations[i]
-                self._weights[i] -= nu * act * deltas[-(i+1)]
-                self._biases[i] -= nu * deltas[-(i+1)].mean(axis=1)
+                act = activations[i+1]
+                delta_w = deltas[i]
+                delta_b = deltas[i+1]
+                self._weights[i] += nu * (act.dot(delta_w.T))/N
+                self._biases[i] += nu * delta_b.mean(axis=1)
 
     def predict(self, X):
         """
@@ -71,7 +78,7 @@ class SimpleNN(object):
         - X <numpy.ndarray>: Nxk array. N is the number of data, k is the
           number of neurons at input layer.
         """
-        assert X.shape[1] == self._weights[0].shape[0], \
+        assert X.shape[1] == self._weights[0].shape[1], \
             "incompatible input data shape with input layer's wieght: {}".format(X.shape[1])
         return self._forward_prob(X)[-1].T
 
@@ -81,18 +88,21 @@ class SimpleNN(object):
         ======
         - X: N by k array, k is the number of input neurons
         """
-        activations = [sigmoid(self._weights[0].dot(X.T)+self._biases[0][:,None])]
-        for i, (weight, bias) in enumerate(zip(self._weights[1:], self._biases[1:])):
+        activations = [X.T] # input layer
+        for i, (weight, bias) in enumerate(zip(self._weights, self._biases)):
             act = sigmoid(weight.dot(activations[i])+bias[:,None])
             activations.append(act)
-
         return activations
 
-def sigmoid(X):
+    def __str__(self):
+        _str = "SimpleNN: " + " x ".join(map(str, self._shape))
+        return _str
+
+def sigmoid(X, eposilon=0.01):
     """
     sigmoid function
     """
-    return 1/(1+np.exp(-X))
+    return 1/(1+eposilon+np.exp(-X))
 
 def grad_sigmoid(X):
     return sigmoid(X) * (1-sigmoid(X))
